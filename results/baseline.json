@@ -1,0 +1,12 @@
+{
+  "population":525047.0,
+  "enroll_rate_monthly":0.0800334312,
+  "share_new":0.2050216457,
+  "share_prior_late":0.4179854375,
+  "share_paid_mean":0.4814549798,
+  "share_paid_sd":0.3743386718,
+  "r_share_paid":0.8147420549,
+  "on_time_rate":0.8961844012,
+  "r_on_time":0.1659758312,
+  "r_enroll":0.0402773083
+}
