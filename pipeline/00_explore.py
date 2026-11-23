@@ -158,8 +158,10 @@ report()
 # Autopay customers always pay on time, so behavior is measured on manual payers.
 # ---------------------------------------------------------------------------
 pay = (payments.groupby(["customer_id", "statement_date"], as_index=False)
-       .agg(first_payment=("payment_date", "min")))
+       .agg(first_payment=("payment_date", "min"), amount_paid=("amount", "sum")))
 stm = statements.merge(pay, on=["customer_id", "statement_date"], how="left")
+# Share of the statement balance paid: 0 if nothing was paid, capped at 1.
+stm["share_paid"] = (stm["amount_paid"].fillna(0) / stm["balance"]).clip(0, 1)
 stm = stm.merge(enrollments, on="customer_id", how="left")
 stm["on_autopay"] = stm["enrollment_date"].notna() & (stm["enrollment_date"] < stm["statement_date"])
 stm["missed"] = stm["first_payment"].isna()
@@ -176,6 +178,14 @@ late_paid = manual[~manual["on_time"] & ~manual["missed"]]
 report(f"- Among late payments, median days late: {late_paid['days_late'].median():.0f} "
        f"(mean {late_paid['days_late'].mean():.1f})")
 report(f"- Autopay customers' on-time rate: {pct(stm.loc[stm['on_autopay'], 'on_time'].mean())}")
+report(f"- Share of balance paid: average {pct(manual['share_paid'].mean())} for manual payers, "
+       f"{pct(stm.loc[stm['on_autopay'], 'share_paid'].mean())} for autopay customers.")
+
+# Transactors vs. revolvers: who usually pays the full balance?
+usual_share = manual.groupby("customer_id")["share_paid"].median()
+transactor_like = (usual_share >= 0.99).mean()
+report(f"- {pct(transactor_like)} of manual payers usually pay their full balance (transactors); "
+       "the rest usually carry a balance (revolvers).")
 report()
 
 # ---------------------------------------------------------------------------
@@ -191,9 +201,13 @@ post = manual[manual["statement_date"] == m_start].set_index("customer_id")
 both = post[["on_time", "days_late"]].join(pre_on_time.rename("pre_on_time"), how="inner")
 pre_days_late = (manual[manual["statement_date"] < m_start]
                  .groupby("customer_id")["days_late"].mean().rename("pre_days_late"))
-both = both.join(pre_days_late, how="inner").dropna()
+both = both.join(pre_days_late, how="inner")
+pre_share = (manual[manual["statement_date"] < m_start]
+             .groupby("customer_id")["share_paid"].mean().rename("pre_share_paid"))
+both = both.join(post["share_paid"]).join(pre_share, how="inner").dropna()
 r_on_time = both["pre_on_time"].corr(both["on_time"].astype(float))
 r_days_late = both["pre_days_late"].corr(both["days_late"])
+r_share = both["pre_share_paid"].corr(both["share_paid"])
 
 # Does past on-time behavior predict who enrolls in the last month?
 m_end = m_start + pd.DateOffset(months=1)
@@ -221,15 +235,17 @@ report("|---|---|---|---|")
 report(f"| On time in month 6 | On-time rate, months 1-5 | {r_on_time:.2f} | {pct(r_on_time ** 2)} |")
 report(f"| Days late in month 6 | Average days late, months 1-5 | {r_days_late:.2f} | {pct(r_days_late ** 2)} |")
 report(f"| Enrolled in month 6 | On-time rate, months 1-5 | {r_enroll:.2f} | {pct(r_enroll ** 2)} |")
+report(f"| Share of balance paid in month 6 | Average share paid, months 1-5 | {r_share:.2f} | {pct(r_share ** 2)} |")
 report()
 report("| Prior payment record | Enrolled in last month | Customers |")
 report("|---|---|---|")
 for band, r in by_band.iterrows():
     report(f"| {band} | {pct(r['mean'])} | {int(r['size']):,} |")
 report()
-report("Reliable payers do enroll more often, but past behavior explains very little of who enrolls "
-       "or pays on time in a single month. CUPED will only remove a small share of the noise here, "
-       "so the sample size has to come from the power calculation, not from variance reduction.")
+report("Two kinds of behavior show up. Paying on time and enrolling are mostly one-off events in a "
+       "given month, so past behavior explains little of them and CUPED will barely help. Share of "
+       f"balance paid is a stable habit, so past behavior explains {pct(r_share ** 2)} of it and CUPED "
+       "should sharply cut the noise on that metric.")
 report()
 
 # ---------------------------------------------------------------------------
@@ -246,6 +262,27 @@ groups = pd.Series(tenure_group[eligible_exp.to_numpy()]).value_counts()
 report("- By tenure: " + ", ".join(f"{g} {n:,}" for g, n in groups.items()) + ".")
 report(f"- Expected 30-day enrollment with no prompt: about {pct(all_rates.iloc[-1])} (last month's rate).")
 
+# Prior late payers: any late or missed payment in the history. A planned segment, because a
+# prompt about payments could land differently with customers who have struggled to pay.
+ever_late = (~manual["on_time"]).groupby(manual["customer_id"]).any()
+late_flag = customers["customer_id"].map(ever_late).fillna(False).astype(bool)
+prior_late_share = late_flag[eligible_exp].mean()
+report(f"- Prior late payers (any late or missed payment in the history): {pct(prior_late_share)} of the population.")
+
 RESULTS.mkdir(exist_ok=True)
+# Inputs for the power analysis (stats/power.py reads this file).
+baseline = {
+    "population": int(eligible_exp.sum()),
+    "enroll_rate_monthly": float(all_rates.iloc[-1]),
+    "share_new": float((tenure_group[eligible_exp.to_numpy()] == "new").mean()),
+    "share_prior_late": float(prior_late_share),
+    "share_paid_mean": float(both["share_paid"].mean()),
+    "share_paid_sd": float(both["share_paid"].std()),
+    "r_share_paid": float(r_share),
+    "on_time_rate": float(both["on_time"].mean()),
+    "r_on_time": float(r_on_time),
+    "r_enroll": float(r_enroll),
+}
+pd.Series(baseline).to_json(RESULTS / "baseline.json", indent=2)
 (RESULTS / "exploration_summary.md").write_text("\n".join(lines) + "\n")
 print(f"\nSaved {RESULTS / 'exploration_summary.md'}")

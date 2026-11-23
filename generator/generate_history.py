@@ -73,6 +73,11 @@ def make_customers(rng, history_start, exp_start):
     # Hidden reliability: chance of paying on time in a given month.
     reliability = rng.beta(*cfg.RELIABILITY_BETA, n)
 
+    # Hidden payment habit: transactors usually pay in full; revolvers usually pay a
+    # stable share of the balance and carry the rest.
+    is_transactor = rng.random(n) < cfg.TRANSACTOR_SHARE
+    pay_habit = np.where(is_transactor, 1.0, rng.beta(*cfg.REVOLVER_HABIT_BETA, n))
+
     # Hidden monthly chance of turning on autopay without any prompt.
     # Reliable customers and new customers are more likely to enroll.
     centered = reliability - reliability.mean()
@@ -96,6 +101,8 @@ def make_customers(rng, history_start, exp_start):
     truth = pd.DataFrame({
         "customer_id": customer_id,
         "reliability": reliability,
+        "is_transactor": is_transactor,
+        "pay_habit": pay_habit,
         "enroll_propensity": enroll_propensity,
         "is_new": is_new,
         "true_open_date": open_date,
@@ -149,6 +156,8 @@ def make_statements_and_payments(rng, customers, truth, enrolled_on, month_start
     closed_date = pd.to_datetime(customers["closed_date"]).to_numpy()
     credit_line = customers["credit_line"].to_numpy()
     reliability = truth["reliability"].to_numpy()
+    is_transactor = truth["is_transactor"].to_numpy()
+    pay_habit = truth["pay_habit"].to_numpy()
     ids = customers["customer_id"].to_numpy()
 
     statements, payments = [], []
@@ -183,11 +192,15 @@ def make_statements_and_payments(rng, customers, truth, enrolled_on, month_start
         days_late = np.clip(rng.geometric(1 / cfg.MEAN_DAYS_LATE, k), 1, 59)
         offset = np.where(on_time, -days_early, days_late)
 
-        # Amount: autopay pays in full; manual on-time payers mix full, minimum and in-between;
-        # late payers pay the minimum.
-        u = rng.random(k)
-        partial = min_due + rng.random(k) * (balance - min_due)
-        manual_amount = np.where(u < 0.4, balance, np.where(u < 0.7, min_due, partial))
+        # Amount: autopay pays in full; late payers pay the minimum; manual on-time payers
+        # follow their habit. Transactors pay in full unless they slip; revolvers pay their
+        # usual share of the balance, give or take a little, and never less than the minimum.
+        slip = rng.random(k) < cfg.TRANSACTOR_SLIP_RATE
+        noisy_habit = np.clip(pay_habit[idx] + rng.normal(0, cfg.PAY_SHARE_MONTHLY_NOISE, k), 0, 1)
+        share = np.where(is_transactor[idx],
+                         np.where(slip, rng.uniform(0.3, 0.9, k), 1.0),
+                         noisy_habit)
+        manual_amount = np.clip(share * balance, min_due, balance)
         amount = np.round(np.where(on_autopay, balance, np.where(late, min_due, manual_amount)), 2)
 
         paid = ~missed
