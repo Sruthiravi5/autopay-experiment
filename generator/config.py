@@ -37,6 +37,18 @@ MISSED_SHARE_OF_LATE = 0.08        # late payments that never arrive (no payment
 MIN_PAYMENT_FLOOR = 25             # minimum payment is max($25, 2% of balance)
 
 # ---------------------------------------------------------------------------
+# Payment habit: how much of the balance a manual payer usually pays.
+# Card issuers split customers into transactors (pay in full every month) and
+# revolvers (pay part of the balance and carry the rest). The habit is stable,
+# with a little month-to-month wobble, so past share paid predicts the next
+# month well. This is the metric where CUPED should clearly help.
+# ---------------------------------------------------------------------------
+TRANSACTOR_SHARE = 0.35            # share of customers who usually pay in full
+REVOLVER_HABIT_BETA = (2.0, 5.0)   # revolvers' usual share of balance paid; mean about 0.29
+PAY_SHARE_MONTHLY_NOISE = 0.08     # month-to-month wobble around the habit
+TRANSACTOR_SLIP_RATE = 0.05        # chance a transactor pays only part in a given month
+
+# ---------------------------------------------------------------------------
 # Organic autopay enrollment (no prompt)
 # Monthly chance of turning on autopay = base x reliability effect x tenure effect.
 # Base is tuned so the monthly rate among eligible customers is about 8%.
