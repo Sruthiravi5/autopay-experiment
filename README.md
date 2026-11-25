@@ -13,8 +13,8 @@ The data is simulated. That's deliberate: because the true effects are planted, 
 | 1. Frame | Done | Question, metrics and decision rule in the preregistration |
 | 2. Explore | Done | [`results/exploration_summary.md`](results/exploration_summary.md) |
 | 3. Design | Done | [`docs/preregistration.md`](docs/preregistration.md), [`results/power_analysis.md`](results/power_analysis.md) |
-| 4. Run | Next | Experiment data with planted effects |
-| 5. Check health | To do | Sample ratio mismatch and balance checks |
+| 4. Run | Done | 30-day test data in `data/experiment/`, described in the [data dictionary](docs/data_dictionary.md) |
+| 5. Check health | Next | Sample ratio mismatch and balance checks, in Databricks |
 | 6. Analyze | To do | Intent-to-treat, effect among viewers, CUPED, segments, guardrails |
 | 7. Validate | To do | A/A false-positive rate, recovery of planted effects |
 | 8. Decide | To do | Tableau readout and decision memo |
@@ -37,6 +37,10 @@ Share of balance paid is a stable habit (transactors pay in full, revolvers carr
 
 About 525,000 eligible customers are split 50/50 for 30 days. The primary metric is 30-day autopay enrollment, analyzed intent-to-treat; the smallest detectable lift is 0.21 points (8.00% to 8.21%). Because not everyone opens the app, the effect among customers who actually saw the prompt is estimated separately. Guardrails on customer service contacts and missed payments must pass before anything ships. Details and the decision rule are in the [preregistration](docs/preregistration.md).
 
+## How the test was run (Stage 4)
+
+`generator/generate_experiment.py` plays out the 30-day test. It splits the 525,047 eligible customers 50/50, lets about 70% of the treatment group open the app and see the prompt (most in the first week), and records autopay sign-ups, the 1 Nov statement and its payments, and customer service contacts. It also writes a copy with a deliberate 51/49 assignment bug for the health check to catch. The true effects are saved in `data/_truth/` and are only opened at the end, to check whether the analysis found them.
+
 ## Repository
 
 ```
@@ -57,7 +61,8 @@ pip install -r requirements.txt
 python generator/generate_history.py   # about 10 seconds; writes data/history/
 python pipeline/00_explore.py          # writes results/exploration_summary.md and baseline.json
 python stats/power.py                  # writes results/power_analysis.md
-python -m pytest tests                 # checks the statistics
+python generator/generate_experiment.py  # about 10 seconds; writes data/experiment/
+python -m pytest tests                 # checks the statistics and the generated test data
 ```
 
 `data/` is not committed; the generator recreates it exactly from a fixed seed.
