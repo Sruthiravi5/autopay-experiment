@@ -5,3 +5,4 @@ scipy
 statsmodels
 pytest
 matplotlib
+pyspark>=4.0  # pipeline/01_load.py; needs Java 17 or later
