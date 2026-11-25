@@ -66,11 +66,22 @@ DUPLICATE_PAYMENT_RATE = 0.005     # ingestion bug: some payment rows appear twi
 MISSING_OPEN_DATE_RATE = 0.01      # some customers have no open date recorded
 
 # ---------------------------------------------------------------------------
-# Experiment effects (used later by generate_experiment.py, Days 7-9)
+# Experiment effects (used by generate_experiment.py)
+# Lifts are added to a viewer's chance of enrolling within the 30 days.
+# Novelty: customers who see the prompt in week 1 respond WEEK1_MULTIPLIER times as
+# strongly as later viewers, scaled so the average lift stays at TRUE_LIFT / LIFT_NEW_CUSTOMERS.
 # ---------------------------------------------------------------------------
 TRUE_LIFT = 0.02                   # enrollment lift among customers who SEE the prompt
 EXPOSURE_RATE = 0.70               # share of treatment who open the app and see it
 LIFT_NEW_CUSTOMERS = 0.04          # stronger lift for new customers
 WEEK1_MULTIPLIER = 1.8             # novelty: the effect is strongest in week 1
-LATE_PAYER_CONTACT_LIFT = 0.15     # guardrail harm: past late payers call service more
+LATE_PAYER_CONTACT_LIFT = 0.15     # guardrail harm: past late payers who see the prompt call 15% more
 SRM_BROKEN_SHARE = 0.51            # treatment share in the broken dataset only
+
+# Customer service contacts during the 30-day test (needed for the guardrail).
+BASE_CONTACT_RATE = 0.12           # average contacts per customer in 30 days
+LATE_PAYER_BASE_CONTACT_MULT = 1.5 # past late payers call more even without any prompt
+
+# Timing of prompt views and responses.
+DAILY_FIRST_OPEN_PROB = 0.15       # viewers' daily chance of first opening the app; front-loads views
+RESPONSE_DELAY_PROB = 0.5          # prompted enrollers sign up within a day or two of seeing it
