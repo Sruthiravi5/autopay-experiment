@@ -1,0 +1,17 @@
+{
+  "row_counts": {
+    "hist_customers": 1000000,
+    "hist_enrollments": 453371,
+    "hist_statements": 5652851,
+    "hist_payments_raw": 5646221,
+    "exp_assignments": 525047,
+    "exp_prompt_views": 184002,
+    "exp_enrollments": 46277,
+    "exp_statements": 1050094,
+    "exp_payments_raw": 1046029,
+    "exp_service_contacts": 78466
+  },
+  "hist_duplicate_payments_removed": 28091,
+  "exp_duplicate_payments_removed": 5204,
+  "customer_metrics_rows": 525047
+}
